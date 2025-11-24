@@ -6,7 +6,7 @@ Author: Megan Chastain
 
 Dataset: UCI Insurance Dataset
 
-Jupyter Notebook: regression_Chastain.ipynb
+Jupyter Notebook: [regression_Chastain.ipynb](https://github.com/Megan-Chastain1/ml_regression_Chastain/blob/main/regression_Chastain.ipynb)
 
 Peer review: https://github.com/Megan-Chastain1/ml_regression_Chastain/blob/main/peer_review.md
 
