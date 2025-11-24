@@ -1,0 +1,340 @@
+# %% [markdown]
+# # Final Project: Regression Analysis
+# 
+# Author: Megan Chastain
+# 
+# Repository: https://github.com/Megan-Chastain1/ml_regression_Chastain
+# 
+# Date: November 23rd, 2025
+# 
+# Introduction: The following is an exploration into the Insurance dataset from UCI. I will perform a regression analysis to see if the cost of healthcare can be predicted from health data, such as BMI, age, and whether or not a person is a smoker.  This journey into health data is important for insurance companies to be able build plans that can assist people with different medical backgrounds and include multiple medical practices.
+
+# %% [markdown]
+# ![image.png](attachment:7cfccaf2-dcff-4cfe-9747-f2dfae0f969c.png)
+
+# %%
+# Imports
+
+import pandas as pd
+from matplotlib.colors import ListedColormap
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+from pandas.plotting import scatter_matrix
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.linear_model import LinearRegression, Ridge, ElasticNet
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedShuffleSplit, train_test_split
+from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
+reg = LinearRegression()
+from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.preprocessing import StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+
+# %% [markdown]
+# ## Section 1. Import and Inspect the Data
+
+# %% [markdown]
+# ### 1.1 Load the dataset and display the first 10 rows.
+
+# %%
+df = pd.read_csv("data/insurance.csv")
+
+# %%
+print(df.head(n=10))
+
+# %% [markdown]
+# ### 1.2 Check for missing values and display summary statistics.
+
+# %%
+# Missing values in features
+df.isnull().sum()
+
+# %%
+# Missing values and data types
+df.info()
+
+# %%
+# Summary statistics
+df.describe()
+
+# %% [markdown]
+# ### Reflection 1: What do you notice about the dataset? Are there any data issues?
+# 
+# There are surprisingly no values missing from the dataset. Also, I am surprised that the max age is 64. 
+# 
+# 
+
+# %% [markdown]
+# ## Section 2. Data Exploration and Preparation
+
+# %% [markdown]
+# ### 2.1 Explore data patterns and distributions
+
+# %%
+# Correlations of numeric data
+print(df.corr(numeric_only=True))
+
+# %%
+# Histograms
+df.hist(bins=30, figsize=(12, 8))
+plt.show()
+
+# %%
+# Boxenplots of the features.
+for column in df.columns:
+    plt.figure(figsize=(6, 4))
+    sns.boxenplot(y=df[column])
+    plt.title(f'Boxenplot for {column}')
+    plt.show()
+
+# %%
+sns.histplot(
+    data=df,
+    x='charges',
+    hue='smoker',
+    bins=50,
+    kde=True,
+    palette={'yes': 'red', 'no': 'blue'},
+    element='step' # Use 'step' or 'layer' to overlay the distributions
+)
+plt.title('Charges Distribution Conditioned on Smoker Status (Key Insight)', fontsize=16)
+plt.xlabel('Charges ($)', fontsize=12)
+plt.ylabel('Frequency', fontsize=12)
+plt.legend(title='Smoker', labels=['Yes', 'No'])
+plt.show()
+
+# %% [markdown]
+# ### 2.2 Handle missing values and clean data
+# 
+# There are no missing values.
+# 
+# ### 2.3 Feature selection and engineering
+# 
+# Since "Charges" feature is skewed, the log will be taken and used.
+
+# %%
+# Log of "Charges"
+
+df['log_charges'] = np.log(df['charges'])
+
+# %%
+# Change 'smoker' to numerical
+df['smoker_num'] = df['smoker'].map({
+    'yes': 1,
+    'no': 0
+})
+
+# %%
+# Distribution of unhealthy characteristics across regions and the related charges
+
+df_obese = df[df['bmi'] > 30].copy()
+
+plt.figure(figsize=(14, 10))
+
+h = sns.FacetGrid(
+    df_obese,
+    col="region",
+    hue="smoker",
+    col_wrap=2,
+    sharey=True,
+    height=4,
+    palette={'yes': 'red', 'no': 'blue'}
+)
+
+h.map_dataframe(sns.histplot, x="log_charges", kde=True, element='step', stat="density", common_norm=False)
+h.add_legend(title="Smoker")
+h.set_axis_labels("Log of Medical Charges (ln($))", "Density")
+h.set_titles("Region: {col_name}")
+
+plt.suptitle('Log Charges Distribution for OBESE Population (BMI > 30)', y=1.02, fontsize=18)
+
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ### Reflection 2: 
+# 
+# 1. What patterns or anomalies do you see? Do any features stand out?  The features that stand out are BMI, Age, and Charges. In Charges and BMI there are outliers. I also think reagion is an interesting feature to explore, however, I will not be moving forward with it.
+# 
+# 2. What preprocessing steps were necessary to clean and improve the data? Since charges is highly skewed, I will continue the project by using the log of the values.
+# 
+# 3. Did you create or modify any features to improve performance? I did not create any new features, but I did take the log of charges and changed smoker to numerical instead of categorical.
+
+# %% [markdown]
+# ## Section 3. Feature Selection and Justification
+
+# %% [markdown]
+# ### 3.1 Choose features and target
+# 
+# Features are: Age (linear), BMI (linear), Smoking (categorical) 
+# 
+# Target: Charges
+
+# %% [markdown]
+# ### 3.2 Define X and y
+
+# %%
+X = df[["age","bmi","smoker_num"]]
+y = df["log_charges"]
+
+# %% [markdown]
+# ### Reflection 3: Why did you choose these features? How might they impact predictions or accuracy?
+# 
+# I choose the variables that I did because they had the highest positive correlation to charges, so these would be the best place to start.
+
+# %% [markdown]
+# ## Section 4. Train a Model (Linear Regression)
+
+# %% [markdown]
+# ### 4.1 Split the data into training and test sets using train_test_split
+
+# %%
+# Basic Train/Test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=123)
+
+print("X_train size:", len(X_train))
+print("X_test size:", len(X_test))
+print("y_train size:", len(y_train))
+print("y_test size:", len(y_test))
+
+# %%
+# To do a stratified split (necessary for dealing with skewed data) it has to be binned.
+y_binned = pd.cut(
+    y,
+    bins=10, # You can adjust the number of bins (e.g., 5, 10)
+    labels=False, # Return integer codes for the bins (e.g., 0, 1, 2, 3, 4)
+    include_lowest=True
+)
+print(f"\nStratifying on {y_binned.nunique()} bins derived from log(Charges).")
+print(f"Bin counts (must all be >= 2):\n{y_binned.value_counts().sort_index()}")
+
+# %%
+# Perform stratified split
+for train_indices, test_indices in splitter.split(X, y_binned):
+   X_train = X.iloc[train_indices]
+   X_test = X.iloc[test_indices]
+   y_train = y.iloc[train_indices] # Use the original continuous y for training
+   y_test = y.iloc[test_indices]   # Use the original continuous y for testing
+
+print(f"X_train size: {len(X_train)}")
+print(f"X_test size: {len(X_test)}")
+
+# %% [markdown]
+# ### 4.2 Train model using Scikit-Learn model.fit() method
+
+# %%
+model = LinearRegression()
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+
+# %% [markdown]
+# ### 4.3 Evalulate performance
+
+# %%
+# Regression evaluation: 
+y_pred = model.predict(X_test)
+
+r2=r2_score(y_test,y_pred)
+print(f'R2:{r2:.2f}')
+
+mae=mean_absolute_error(y_test,y_pred)
+print(f'MAE:{mae:.2f}')
+
+rmse = root_mean_squared_error(y_test, y_pred)
+print(f'RMSE:{rmse:.2f}')
+
+
+
+
+# %% [markdown]
+# ### Reflection 4: How well did the model perform? Any surprises in the results?
+# 
+# Based on the results, the model is a good fit of the dataset (R2 means the model fits 67% of the data). MAE=0.33 means that the actual values differ only 0.33 from the predicted values (in the log data). RMSE > MAE means that the data is skewed, so the next step is to evaluate outliers.  I kept the linear regression as my model choice because of the continuous data. Other models would require the target feature, charges, to be transformed into a binary type based on whether or not the data fell above or below the mean.
+
+# %% [markdown]
+# ## Section 5. Improve the Model or Try Alternates (Implement Pipelines)
+
+# %%
+y_reshaped = y.values.reshape(-1, 1)
+y_scaler = StandardScaler()
+y_scaled = y_scaler.fit_transform(y_reshaped)
+y_scaled_series = pd.Series(y_scaled.flatten(), name='charges_scaled')
+print("Original vs. Scaled Charges:")
+comparison_df = pd.concat([y.rename('charges_original'), y_scaled_series], axis=1)
+print(comparison_df)
+print("\nStatistics of the 'charges' column after scaling:")
+print(comparison_df['charges_scaled'].describe().loc[['mean', 'std']])
+
+
+# %%
+# Basic Train/Test split on scaled data
+X_train, X_test, y_scaled_train, y_scaled_test = train_test_split(X, y_scaled, test_size=0.2, random_state=123)
+
+print("X_train size:", len(X_train))
+print("X_test size:", len(X_test))
+print("y_scaled_train size:", len(y_scaled_train))
+print("y_scaled_test size:", len(y_scaled_test))
+
+# %%
+# Fit scaled data
+model = LinearRegression()
+model.fit(X_train, y_scaled_train)
+y_scaled_pred = model.predict(X_test)
+
+# %%
+# Regression evaluation on scaled data: 
+y_scaled_pred = model.predict(X_test)
+
+r2=r2_score(y_scaled_test,y_scaled_pred)
+print(f'R2:{r2:.2f}')
+
+mae=mean_absolute_error(y_scaled_test,y_scaled_pred)
+print(f'MAE:{mae:.2f}')
+
+rmse = root_mean_squared_error(y_scaled_test, y_scaled_pred)
+print(f'RMSE:{rmse:.2f}')
+
+# %%
+# Elastic Net model on scaled data
+elastic_model = ElasticNet(alpha=0.3, l1_ratio=0.5)
+elastic_model.fit(X_train, y_scaled_train)
+y_pred_elastic = elastic_model.predict(X_test)
+
+# %%
+# Elastic Net Regression evaluation: 
+
+r2=r2_score(y_scaled_test,y_pred_elastic)
+print(f'R2:{r2:.2f}')
+
+mae=mean_absolute_error(y_scaled_test,y_pred_elastic)
+print(f'MAE:{mae:.2f}')
+
+rmse = root_mean_squared_error(y_scaled_test, y_pred_elastic)
+print(f'RMSE:{rmse:.2f}')
+
+# %%
+# Summary table comparing all models:
+def report(name, y_true, y_pred):
+    print(f"{name} R²: {r2_score(y_true, y_pred):.3f}")
+    print(f"{name} RMSE: {root_mean_squared_error(y_true, y_pred):.2f}")
+    print(f"{name} MAE: {mean_absolute_error(y_true, y_pred):.2f}\n")
+
+report("Linear", y_test, y_pred)
+report("Scaled", y_scaled_test, y_scaled_pred)
+report("ElasticNet", y_scaled_test, y_pred_elastic)
+
+
+# %% [markdown]
+# ### Reflection 5: Which models performed better? How does scaling impact results?
+# 
+# The linear regression on scaled target feature worked the best. It increased R2, meaning it fit almost 80% of the data with decreasing the MAE, so the predicted values only differed 0.29 from the actual values. The dataset still has outliers, but not as bad as originally.
+
+# %% [markdown]
+# ## Section 6. Final Thoughts & Insights
+# 
+# From what I've seen the best method is a scaled linear regression because the data is continuous and the target feature is a float data type. Scaled R2 fits almost 80% of the dataset, which is pretty good.
+# 
+# If I were to do more I would change the target feature to a binary data type to perform classifier tests like random forest or MLP. 
